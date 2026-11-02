@@ -17,6 +17,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.xtclang.plugin.XtcPlugin;
 import org.xtclang.plugin.tasks.XtcCompileTask;
 import org.xtclang.plugin.tasks.XtcRunTask;
+import org.xtclang.plugin.tasks.XtcTestTask;
 
 class LauncherArgumentsTest {
     @ParameterizedTest
@@ -61,5 +62,33 @@ class LauncherArgumentsTest {
         assertTrue(forked.contains("-M"), forked.toString());
         assertEquals("verify", forked.get(forked.indexOf("-M") + 1));
         assertEquals(List.of("Example", "one", "two"), forked.subList(forked.size() - 3, forked.size()));
+    }
+
+    @Test
+    void debugReachesForkedLaunchersBeforeTheModule() {
+        final var project = ProjectBuilder.builder().build();
+        project.setVersion("1.0");
+        project.getPluginManager().apply(XtcPlugin.class);
+        final var run = project.getTasks().named("runXtc", XtcRunTask.class).get();
+        final var test = project.getTasks().named("testXtc", XtcTestTask.class).get();
+        final var builder = new ForkedCommandLineBuilder();
+        assertFalse(List.of(builder.buildRunnerArgs(run, "Example", List.of())).contains("--debug"));
+
+        run.getDebug().set("listen:127.0.0.1:5005");
+        final var withoutAgent = List.of(builder.buildRunnerArgs(run, "Example", List.of()));
+        assertEquals("listen:127.0.0.1:5005", withoutAgent.get(withoutAgent.indexOf("--debug") + 1));
+
+        for (final XtcRunTask task : List.of(run, test)) {
+            task.getDebug().set("connect:127.0.0.1:5005,suspend,token=t");
+            task.getDebugAgent().set("/agent.jar");
+        }
+        final var runArgs = List.of(builder.buildRunnerArgs(run, "Example", List.of()));
+        final var testArgs = List.of(builder.buildTestRunnerArgs(test, "ExampleTest", List.of()));
+        for (final var args : List.of(runArgs, testArgs)) {
+            final int option = args.indexOf("--debug");
+            assertTrue(option >= 0, args.toString());
+            assertEquals("connect:127.0.0.1:5005,suspend,token=t,agent=/agent.jar", args.get(option + 1));
+            assertTrue(option < args.indexOf("--no-recompile"), args.toString());
+        }
     }
 }

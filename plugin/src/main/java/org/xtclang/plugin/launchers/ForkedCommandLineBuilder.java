@@ -76,6 +76,7 @@ public final class ForkedCommandLineBuilder {
             args.addAll(List.of("-L", modulePath.getAbsolutePath()));
         }
 
+        addDebugOption(args, task);
         args.add("--no-recompile");
         args.add(moduleName);
         args.addAll(moduleArgs);
@@ -93,10 +94,22 @@ public final class ForkedCommandLineBuilder {
         }
 
         args.addAll(List.of("--xunit-out", task.getOutputDirectory().get().getAsFile().getAbsolutePath()));
+        addDebugOption(args, task);
         args.add("--no-recompile");
         args.add(moduleName);
         args.addAll(moduleArgs);
         return args.toArray(String[]::new);
+    }
+
+    /**
+     * Adds {@code --debug} for a debugged run, naming the agent's jar with its {@code agent=} option.
+     */
+    private static void addDebugOption(final List<String> args, final XtcRunTask task) {
+        final String debug = task.getDebug().getOrNull();
+        if (debug != null) {
+            final String agent = task.getDebugAgent().getOrNull();
+            args.addAll(List.of("--debug", agent == null ? debug : debug + ",agent=" + agent));
+        }
     }
 
     private static void addBooleanFlag(final List<String> args, final boolean enabled, final String flag) {
